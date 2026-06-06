@@ -22,9 +22,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
           cache: pip
@@ -33,7 +33,7 @@ jobs:
 
       # Önceki turun seen.db'sini geri yükle (anahtarlar değişmez olduğundan
       # her tur yeni anahtarla kaydedilir, restore-keys en yenisini bulur)
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v5
         with:
           path: seen.db
           key: seen-db-${{ github.run_id }}
@@ -47,7 +47,7 @@ jobs:
           ENABLE_KAP: "0" # KAP, veri merkezi IP'lerini zaten engelliyor; 20 sn'lik beklemeyi atla
         run: python main.py
 
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v5
         if: always() # tur hata verse bile işaretlenenleri kaybetme
         with:
           path: seen.db
