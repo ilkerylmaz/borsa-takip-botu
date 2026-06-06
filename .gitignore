@@ -1,0 +1,15 @@
+# Gizli bilgiler — ASLA commit'leme
+.env
+
+# Çalışma zamanı verisi
+seen.db
+*.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Geçici dosyalar
+_*.py

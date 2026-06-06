@@ -1,0 +1,54 @@
+# BIST Haber Botu — GitHub Actions üzerinde zamanlanmış çalıştırma.
+#
+# Her ~10 dakikada bir tek tur çalışır (GitHub cron'u esnektir; fiilen 10-20 dk).
+# seen.db, actions/cache ile turlar arasında taşınır — cache kaybolursa bot ilk
+# turu sessiz geçtiği için spam olmaz.
+#
+# Kurulum: Repo Settings -> Secrets and variables -> Actions -> New repository secret
+#   DISCORD_WEBHOOK_URL = Discord webhook adresin
+name: bist-haber-botu
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {} # elle tetiklemek için (Actions sekmesi -> Run workflow)
+
+concurrency:
+  group: bot
+  cancel-in-progress: false # çakışan turlar kuyruğa girsin, yarıda kesilmesin
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # Önceki turun seen.db'sini geri yükle (anahtarlar değişmez olduğundan
+      # her tur yeni anahtarla kaydedilir, restore-keys en yenisini bulur)
+      - uses: actions/cache/restore@v4
+        with:
+          path: seen.db
+          key: seen-db-${{ github.run_id }}
+          restore-keys: |
+            seen-db-
+
+      - name: Botu çalıştır (tek tur)
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_ONCE: "1"
+          ENABLE_KAP: "0" # KAP, veri merkezi IP'lerini zaten engelliyor; 20 sn'lik beklemeyi atla
+        run: python main.py
+
+      - uses: actions/cache/save@v4
+        if: always() # tur hata verse bile işaretlenenleri kaybetme
+        with:
+          path: seen.db
+          key: seen-db-${{ github.run_id }}
