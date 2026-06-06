@@ -2,11 +2,18 @@
 Tekilleştirme deposu (SQLite).
 Aynı haberin iki kez gönderilmesini engeller. Kararlı bir 'uid' (link veya KAP id)
 üzerinden çalışır. İstersen gönderilen haberleri denetim için saklar.
+
+Veri kıymetli değildir: bir haber RSS akışından düştükten sonra kaydı gereksizdir.
+Bu yüzden RETENTION_DAYS'ten eski kayıtlar açılışta silinir (boyut sabit kalır)
+ve veritabanının tamamen kaybı bile tek sessiz tura mal olur (bkz. main.py).
 """
 
 from __future__ import annotations
 import sqlite3
 import time
+
+# Akışlar haberi en fazla birkaç gün taşır; 60 gün bol bol güvenli pencere.
+RETENTION_DAYS = 60
 
 
 class SeenStore:
@@ -22,6 +29,15 @@ class SeenStore:
                )"""
         )
         self.conn.commit()
+        self._prune()
+
+    def _prune(self) -> None:
+        """RETENTION_DAYS'ten eski kayıtları siler; db boyutunu sabit tutar."""
+        esik = time.time() - RETENTION_DAYS * 86400
+        cur = self.conn.execute("DELETE FROM seen WHERE ts < ?", (esik,))
+        self.conn.commit()  # VACUUM açık işlem varken çalışmaz; önce commit
+        if cur.rowcount:
+            self.conn.execute("VACUUM")
 
     def is_seen(self, uid: str) -> bool:
         cur = self.conn.execute("SELECT 1 FROM seen WHERE uid = ?", (uid,))

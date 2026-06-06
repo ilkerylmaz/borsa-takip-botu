@@ -15,7 +15,7 @@ python main.py        # requires DISCORD_WEBHOOK_URL in .env
 
 No tests, linter, or build system. Runtime config lives in `.env` (see README table): `POLL_INTERVAL_SECONDS`, `MIN_RELEVANCE_SCORE`, `ENABLE_KAP`, `ENABLE_PRICE`, `RSS_FEEDS`, `RUN_ONCE` (single cycle then exit — used by GitHub Actions), `SEEN_DB_PATH`.
 
-An empty `seen.db` triggers a **silent first round**: items are marked seen but not sent (prevents a spam burst on fresh deploys or cache misses). So deleting `seen.db` does NOT cause re-sends — it causes one quiet cycle instead.
+An empty `seen.db` triggers a **silent first round**: items are marked seen but not sent (prevents a spam burst on fresh deploys or cache misses). So deleting `seen.db` does NOT cause re-sends — it causes one quiet cycle instead. Rows older than `RETENTION_DAYS` (60, in store.py) are pruned on startup, so the db never grows unbounded; the dedup data is deliberately disposable (a remote DB was considered and rejected — single instance, self-healing loss).
 
 Deployment: `.github/workflows/bot.yml` runs the bot on a ~10-min cron via `RUN_ONCE=1`, carrying `seen.db` between runs with `actions/cache` (immutable keys + `restore-keys` prefix trick). `DISCORD_WEBHOOK_URL` comes from repo Actions secrets; `ENABLE_KAP=0` there because KAP's WAF blocks datacenter IPs (it blocks home IPs too as of June 2026 — see `fetch_kap`'s warn-once handling).
 
