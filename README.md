@@ -48,8 +48,49 @@ URL'yi kopyala → `.env` içine `DISCORD_WEBHOOK_URL` olarak yapıştır.
 | `RSS_FEEDS` | Virgülle ayrılmış RSS adresleri (opsiyonel, override) | dahili liste |
 | `RUN_ONCE` | `1` ise tek tur çalışıp çıkar (zamanlanmış ortamlar için) | `0` |
 | `SEEN_DB_PATH` | Tekilleştirme veritabanının yolu | `seen.db` |
+| `DISCORD_BOT_TOKEN` | `/hisse` komut botunun token'ı (sadece `bot.py` için) | — |
+| `GUILD_ID` | Dev: komutların anında göründüğü test sunucusu ID'si | boş (global) |
 
-## Ücretsiz çalıştırma: GitHub Actions
+## /hisse Komutu (ayrı bot: bot.py)
+
+Haber botundan bağımsız ikinci bir giriş noktası: Discord'a **sürekli bağlı**
+kalan bir gateway botu. Chatte `/hisse kod:THYAO periyot:1 Ay` yazınca:
+
+- 💰 anlık fiyat + günlük değişim
+- 📊 son seans hacmi (lot + TL karşılığı)
+- 🔄 dolaşımdaki lot sayısı ve piyasa değeri (+ toplam piyasa değeri)
+- 📈 günlük mum grafiği (1 Hafta / 1 Ay): mumların üzerinde **SMA200**,
+  altında **hacim**, **MACD(12,26,9)** ve **RSI(14)** panelleri
+
+`kod` alanı yazarken otomatik tamamlanır (`tickers.py` listesinden); listede
+olmayan BIST kodları da kabul edilir (veri Yahoo Finance'tan geldiği sürece).
+
+> **Önemli:** Komut botu, haber botu gibi "10 dakikada bir uyan" modeliyle
+> çalışamaz — komuta anında cevap için sürekli açık bir süreç gerekir. Bu yüzden
+> GitHub Actions'ta DEĞİL, şimdilik lokalde (`python bot.py`) çalıştırılır.
+> Haber botu Actions'ta aynen çalışmaya devam eder; ikisi bağımsızdır.
+
+### Bot hesabı kurulumu (bir kerelik)
+
+1. <https://discord.com/developers/applications> → **New Application** → isim ver.
+2. Sol menü **Bot** → **Reset Token** → token'ı kopyala → `.env`'e
+   `DISCORD_BOT_TOKEN=...` olarak yapıştır (asla commit'leme).
+   Ayrıcalıklı intent (Presence/Members/Message Content) **gerekmez**, hiçbirini açma.
+3. Sol menü **OAuth2 → URL Generator**: scope olarak `bot` + `applications.commands`
+   işaretle; bot izinlerinden `Send Messages`, `Embed Links`, `Attach Files` seç.
+   Üretilen URL'yi tarayıcıda aç ve botu sunucuna davet et.
+4. (Önerilen, dev için) Discord'da sunucu adına sağ tık → **Sunucu ID'sini Kopyala**
+   (Geliştirici Modu açık olmalı) → `.env`'e `GUILD_ID=...` yaz. Böylece komutlar
+   **anında** görünür; `GUILD_ID` boşsa global kayıt ~1 saat sürebilir.
+5. Çalıştır: `python bot.py` → logda "Bot hazır" görünce `/hisse` kullanılabilir.
+
+### Grafik üzerinde hızlı deneme (Discord'suz)
+
+```bash
+python charting.py THYAO 1a   # _chart_THYAO.png yazar (1h = 1 hafta, 1a = 1 ay)
+```
+
+## Ücretsiz çalıştırma: GitHub Actions (haber botu)
 
 Bot, sunucu olmadan GitHub Actions üzerinde zamanlanmış olarak çalışabilir
 (`.github/workflows/bot.yml`). Her ~10-20 dakikada bir tek tur atar

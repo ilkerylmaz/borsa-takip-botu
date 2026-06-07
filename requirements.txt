@@ -2,3 +2,8 @@ aiohttp>=3.9
 feedparser>=6.0
 python-dotenv>=1.0
 yfinance>=0.2.40
+
+# /hisse komut botu (bot.py) bağımlılıkları
+discord.py>=2.4
+mplfinance>=0.12.10b0
+matplotlib>=3.8

@@ -13,3 +13,4 @@ venv/
 
 # Geçici dosyalar
 _*.py
+_chart_*.png
