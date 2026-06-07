@@ -31,7 +31,10 @@ _INFO_TTL = 6 * 3600.0  # ~6 saat
 _info_cache: dict[str, tuple[float, dict]] = {}  # kod -> (zaman, info)
 
 # Periyot adı -> gösterilecek günlük mum sayısı (işlem günü)
-PERIYOT_MUM = {"1 Hafta": 5, "1 Ay": 22}
+# PERIYOT_SIRA: hem slash komut seçenekleri hem de grafik altı düğmeler için
+# kullanılan görüntüleme sırası. fetch_history 2y çektiği için 1 Yıl (252) rahat sığar.
+PERIYOT_MUM = {"1 Hafta": 5, "1 Ay": 22, "3 Ay": 66, "1 Yıl": 252}
+PERIYOT_SIRA = ["1 Hafta", "1 Ay", "3 Ay", "1 Yıl"]
 
 
 def fetch_history(kod: str, lookback: str = "2y") -> pd.DataFrame:
@@ -56,6 +59,9 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # SMA200 — kısa geçmişli hisselerde de çizgi çıksın diye min_periods=1
     df["SMA200"] = close.rolling(200, min_periods=1).mean()
+
+    # SMA50 — orta vade trend / kesişim (analiz.teknik_gorunum kullanır)
+    df["SMA50"] = close.rolling(50, min_periods=1).mean()
 
     # MACD(12,26,9)
     ema12 = close.ewm(span=12, adjust=False).mean()
@@ -135,6 +141,22 @@ def get_overview(kod: str) -> dict:
     piyasa_degeri = info.get("marketCap")
     ad = info.get("longName") or info.get("shortName") or _ad_from_tickers(kod)
 
+    # --- Analist konsensüsü: aynı (cache'li) info'dan, ekstra istek yok ---
+    # Yahoo BIST'in likit isimlerini kapsar; küçük/yeni hisselerde alanlar
+    # boş gelir. tavsiye ham anahtar olarak döner ("strong_buy"/"none"/None);
+    # Türkçeye çevirme + "en az 2 analist" eşiği sunum tarafında (bot.py).
+    hedef_ort = info.get("targetMeanPrice")
+    analist = {
+        "tavsiye": info.get("recommendationKey"),
+        "analist_sayisi": info.get("numberOfAnalystOpinions"),
+        "hedef_ort": hedef_ort,
+        "hedef_yuksek": info.get("targetHighPrice"),
+        "hedef_dusuk": info.get("targetLowPrice"),
+        # ortalama hedefe göre yukarı/aşağı potansiyel (%)
+        "hedef_potansiyel": ((hedef_ort - fiyat) / fiyat * 100)
+                            if (hedef_ort and fiyat) else None,
+    }
+
     return {
         "kod": kod,
         "ad": ad,
@@ -146,6 +168,7 @@ def get_overview(kod: str) -> dict:
         "dolasim_kaynak": dolasim_kaynak,  # "float" | "shares" | None
         "dolasim_tl": dolasim_lot * fiyat if (dolasim_lot and fiyat) else None,
         "piyasa_degeri": piyasa_degeri,
+        "analist": analist,
     }
 
 

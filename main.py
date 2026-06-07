@@ -33,8 +33,7 @@ def _cfg():
     webhook = os.getenv("DISCORD_WEBHOOK_URL", "").strip()
     if not webhook:
         raise SystemExit("DISCORD_WEBHOOK_URL boş. .env dosyasını doldur.")
-    feeds_env = os.getenv("RSS_FEEDS", "").strip()
-    feeds = [u.strip() for u in feeds_env.split(",") if u.strip()] or sources.DEFAULT_RSS_FEEDS
+    feeds = sources.feeds_from_env()
     return {
         "webhook": webhook,
         "interval": int(os.getenv("POLL_INTERVAL_SECONDS", "120")),

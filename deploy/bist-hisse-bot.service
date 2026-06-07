@@ -1,0 +1,24 @@
+[Unit]
+# BIST /hisse + /health Discord gateway botu (bot.py) — 7/24 servis.
+# Kurulum: deploy/README.md
+Description=BIST /hisse Discord gateway botu (bot.py)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# VM kullanıcına göre düzelt (Ubuntu imajı: ubuntu, Oracle Linux imajı: opc)
+User=ubuntu
+WorkingDirectory=/home/ubuntu/discord-botu
+# .env WorkingDirectory'de durur; bot.py onu load_dotenv() ile okur
+# (DISCORD_BOT_TOKEN, opsiyonel GUILD_ID / RSS_FEEDS).
+ExecStart=/home/ubuntu/discord-botu/.venv/bin/python bot.py
+# Çökerse / reboot sonrası kendiliğinden kalk
+Restart=always
+RestartSec=10
+# Loglar journald'a: journalctl -u bist-hisse-bot -f
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

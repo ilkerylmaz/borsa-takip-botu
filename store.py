@@ -57,3 +57,26 @@ class SeenStore:
 
     def close(self) -> None:
         self.conn.close()
+
+
+def db_stats(path: str = "seen.db") -> dict | None:
+    """seen.db özeti (SALT-OKUNUR): kayıt sayısı + en yeni/eski kayıt zamanı.
+
+    Dosya yoksa/okunamazsa None döner. Yan etkisizdir: tablo OLUŞTURMAZ, prune
+    ETMEZ — bot.py'deki /health bunu çağırır; SeenStore() kullanmak boş bir db
+    yaratıp prune tetikleyeceği için salt-okunur bir bağlantı tercih edilir.
+    """
+    import os
+    if not os.path.exists(path):
+        return None
+    try:
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            row = conn.execute("SELECT COUNT(*), MAX(ts), MIN(ts) FROM seen").fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+    if not row:
+        return None
+    return {"kayit": row[0] or 0, "son_ts": row[1], "ilk_ts": row[2]}

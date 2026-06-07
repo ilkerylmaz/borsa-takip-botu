@@ -59,8 +59,14 @@ kalan bir gateway botu. Chatte `/hisse kod:THYAO periyot:1 Ay` yazınca:
 - 💰 anlık fiyat + günlük değişim
 - 📊 son seans hacmi (lot + TL karşılığı)
 - 🔄 dolaşımdaki lot sayısı ve piyasa değeri (+ toplam piyasa değeri)
-- 📈 günlük mum grafiği (1 Hafta / 1 Ay): mumların üzerinde **SMA200**,
-  altında **hacim**, **MACD(12,26,9)** ve **RSI(14)** panelleri
+- 📈 günlük mum grafiği (1 Hafta / 1 Ay / 3 Ay / 1 Yıl): mumların üzerinde
+  **SMA200**, altında **MACD(12,26,9)** ve **RSI(14)** panelleri
+- 🔘 grafiğin altındaki düğmelerle periyot **anında değiştirilir** (yeni komut
+  yazmaya gerek yok; grafik yerinde yeniden çizilir)
+
+SMA200 fiyattan çok uzaktaysa bile grafikte **her zaman görünür**: yakınsa
+kendi yerinde çizilir, çok uzaksa kenara kıstırılıp gerçek değeri `▲`/`▼` ile
+etiketlenir (mumlar ezilmesin diye).
 
 `kod` alanı yazarken otomatik tamamlanır (`tickers.py` listesinden); listede
 olmayan BIST kodları da kabul edilir (veri Yahoo Finance'tan geldiği sürece).
@@ -87,7 +93,7 @@ olmayan BIST kodları da kabul edilir (veri Yahoo Finance'tan geldiği sürece).
 ### Grafik üzerinde hızlı deneme (Discord'suz)
 
 ```bash
-python charting.py THYAO 1a   # _chart_THYAO.png yazar (1h = 1 hafta, 1a = 1 ay)
+python charting.py THYAO 1a   # _chart_THYAO.png yazar (1h=1 hafta, 1a=1 ay, 3a=3 ay, 1y=1 yıl)
 ```
 
 ## Ücretsiz çalıştırma: GitHub Actions (haber botu)

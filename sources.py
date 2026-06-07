@@ -13,7 +13,10 @@ DOĞRULA/DEĞİŞTİR. Çalışmayan adres otomatik atlanır.
 """
 
 from __future__ import annotations
+import asyncio
 import logging
+import os
+import time
 
 import aiohttp
 import feedparser
@@ -24,9 +27,13 @@ log = logging.getLogger("sources")
 
 DEFAULT_RSS_FEEDS = [
     "https://www.bloomberght.com/rss",
-    "https://bigpara.hurriyet.com.tr/rss/",
+    "https://www.hurriyet.com.tr/rss/ekonomi",  # eski bigpara feed'i 404'a düştü; yerine Hürriyet Ekonomi
     "https://www.dunya.com/rss",
     "https://tr.investing.com/rss/news.rss",
+    # KAP WAF tarafından engellendiği için (bkz. fetch_kap), KAP kapsamını RSS'ten
+    # telafi eden borsa-odaklı bir kaynak. (finansgundem.com kardeş sitesi neredeyse
+    # birebir aynı içeriği farklı URL'le yayınladığından eklenmedi — çift haber olurdu.)
+    "https://www.borsagundem.com/rss",
 ]
 
 _HEADERS = {
@@ -109,6 +116,89 @@ async def fetch_kap(session: aiohttp.ClientSession) -> list[NewsItem]:
         except Exception as ex:
             log.debug("KAP satırı atlandı: %s", ex)
     return items
+
+
+def feeds_from_env() -> list[str]:
+    """RSS_FEEDS ortam değişkenini ayrıştırır; boşsa DEFAULT_RSS_FEEDS döner.
+
+    Hem main._cfg hem de bot.py'deki /health aynı kaynak listesini buradan alır
+    (tek doğruluk kaynağı).
+    """
+    ham = os.getenv("RSS_FEEDS", "").strip()
+    feeds = [u.strip() for u in ham.split(",") if u.strip()]
+    return feeds or DEFAULT_RSS_FEEDS
+
+
+# ---------------------------------------------------------------------------
+# Sağlık kontrolü (tanı): kaynakları tek tek dener ve durum raporu döndürür.
+# Haber döngüsünü (run_once) ETKİLEMEZ; bot.py'deki /health komutu içindir.
+# Her öğe: {tip, ad, url, ok, adet, sure_ms, hata}.
+# ---------------------------------------------------------------------------
+def _hata_metni(ex: Exception) -> str:
+    """İstisnayı okunur kısa metne çevirir; bazı hatalar (TimeoutError) boş
+    mesajlıdır — o zaman sondaki boş iki nokta kalmasın diye yalnız tip adı."""
+    m = str(ex).strip()
+    return f"{type(ex).__name__}: {m}" if m else type(ex).__name__
+
+
+async def _probe_rss(session: aiohttp.ClientSession, url: str) -> dict:
+    """Tek bir RSS kaynağını dener; sağlık sözlüğü döndürür (asla raise etmez)."""
+    t0 = time.perf_counter()
+    try:
+        async with session.get(url, headers=_HEADERS,
+                               timeout=aiohttp.ClientTimeout(total=20)) as r:
+            status = r.status
+            raw = await r.read()
+        parsed = feedparser.parse(raw)
+        adet = len(parsed.entries)
+        ad = (parsed.feed.get("title") if parsed.feed else None) or url
+        sure = round((time.perf_counter() - t0) * 1000)
+        if status != 200:
+            return {"tip": "RSS", "ad": ad, "url": url, "ok": False,
+                    "adet": adet, "sure_ms": sure, "hata": f"HTTP {status}"}
+        if adet == 0:
+            be = getattr(parsed, "bozo_exception", None)
+            hata = f"0 öğe ({type(be).__name__})" if be else "0 öğe (ayrıştırılamadı?)"
+            return {"tip": "RSS", "ad": ad, "url": url, "ok": False,
+                    "adet": 0, "sure_ms": sure, "hata": hata}
+        return {"tip": "RSS", "ad": ad, "url": url, "ok": True,
+                "adet": adet, "sure_ms": sure, "hata": None}
+    except Exception as ex:
+        return {"tip": "RSS", "ad": url, "url": url, "ok": False, "adet": 0,
+                "sure_ms": round((time.perf_counter() - t0) * 1000),
+                "hata": _hata_metni(ex)}
+
+
+async def _probe_kap(session: aiohttp.ClientSession) -> dict:
+    """KAP uç noktasını dener (warn-once durumundan bağımsız ham test)."""
+    t0 = time.perf_counter()
+    try:
+        async with session.get(KAP_DISCLOSURES_URL, headers=_HEADERS,
+                               timeout=aiohttp.ClientTimeout(total=20)) as r:
+            status = r.status
+            data = await r.json(content_type=None)
+        sure = round((time.perf_counter() - t0) * 1000)
+        if status != 200:
+            return {"tip": "KAP", "ad": "KAP", "url": KAP_DISCLOSURES_URL, "ok": False,
+                    "adet": 0, "sure_ms": sure, "hata": f"HTTP {status}"}
+        rows = data if isinstance(data, list) else data.get("disclosures", data.get("data", []))
+        adet = len(rows or [])
+        return {"tip": "KAP", "ad": "KAP", "url": KAP_DISCLOSURES_URL,
+                "ok": adet > 0, "adet": adet, "sure_ms": sure,
+                "hata": None if adet else "0 bildirim"}
+    except Exception as ex:
+        return {"tip": "KAP", "ad": "KAP", "url": KAP_DISCLOSURES_URL, "ok": False,
+                "adet": 0, "sure_ms": round((time.perf_counter() - t0) * 1000),
+                "hata": _hata_metni(ex)}
+
+
+async def probe(session: aiohttp.ClientSession, feeds: list[str],
+                enable_kap: bool = True) -> list[dict]:
+    """Tüm kaynakları eşzamanlı dener ve sağlık raporu listesi döndürür."""
+    gorevler = [_probe_rss(session, u) for u in feeds]
+    if enable_kap:
+        gorevler.append(_probe_kap(session))
+    return list(await asyncio.gather(*gorevler))
 
 
 def _clean(raw: str) -> str:
