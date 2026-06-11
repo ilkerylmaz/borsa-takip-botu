@@ -427,7 +427,12 @@ async def _uretim_durumu(session: aiohttp.ClientSession) -> dict | None:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
             if r.status != 200:
                 return {"hata": f"HTTP {r.status}"}
-            return await r.json(content_type=None)
+            veri = await r.json(content_type=None)
+            # Bazı ağlar bu adresi araya girip farklı gövdeyle cevaplayabiliyor;
+            # sözlük değilse (str/list/sayı) olduğu gibi kullanma — hata say.
+            if not isinstance(veri, dict):
+                return {"hata": f"beklenmedik içerik ({type(veri).__name__})"}
+            return veri
     except Exception as ex:
         return {"hata": f"{type(ex).__name__}: {ex}"}
 
@@ -442,20 +447,32 @@ async def health(interaction: discord.Interaction):
     """
     if not await _guvenli_defer(interaction, thinking=True):
         return
+    try:
+        await _health_govde(interaction)
+    except Exception:
+        # Tek geniş ağ: hata nerede olursa olsun journal'a TAM traceback
+        # (bizim dosya/satır dahil) düşer ve kullanıcı cevapsız kalmaz.
+        log.exception("/health hatası")
+        try:
+            await interaction.followup.send(
+                "Sağlık kontrolü sırasında beklenmeyen bir hata oluştu.")
+        except discord.HTTPException:
+            pass
+
+
+async def _health_govde(interaction: discord.Interaction) -> None:
+    """/health'in asıl işi (defer sonrası); istisnaları çağıran sarmalar."""
     feeds = sources.feeds_from_env()
     enable_kap = os.getenv("ENABLE_KAP", "1") == "1"
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            rapor, durum = await asyncio.gather(
-                sources.probe(session, feeds, enable_kap),
-                _uretim_durumu(session),
-            )
-    except Exception:
-        log.exception("/health yoklama hatası")
-        await interaction.followup.send(
-            "Sağlık kontrolü sırasında beklenmeyen bir hata oluştu.")
-        return
+    async with aiohttp.ClientSession() as session:
+        # DİKKAT: aşağıda embed durum METNİ için 'durum' adlı yerel değişken
+        # var — üretim sözlüğünün adı farklı kalsın (bir kez ezilip 'str'
+        # üzerinde .get patlamıştı).
+        rapor, uretim = await asyncio.gather(
+            sources.probe(session, feeds, enable_kap),
+            _uretim_durumu(session),
+        )
 
     ok_sayi = sum(1 for r in rapor if r["ok"])
     toplam = len(rapor)
@@ -485,14 +502,14 @@ async def health(interaction: discord.Interaction):
 
     # Üretim haber botu (GitHub Actions): 'durum' dalındaki status.json özeti.
     # Asıl seen.db Actions cache'inde yaşar; gerçek kayıt sayısı budur.
-    if durum is not None:
-        if durum.get("hata"):
-            uretim_txt = (f"durum okunamadı: {str(durum['hata'])[:120]}\n"
+    if uretim is not None:
+        if uretim.get("hata"):
+            uretim_txt = (f"durum okunamadı: {str(uretim['hata'])[:120]}\n"
                           "(`durum` dalı ilk cron turundan sonra oluşur)")
         else:
-            yas_dk = max(0.0, (time.time() - float(durum.get("ts") or 0)) / 60)
-            uretim_txt = (f"{fmt.tr_sayi(durum.get('kayit', 0), 0)} kayıt · "
-                          f"son kayıt: {_ts_tr(durum.get('son_ts'))} · "
+            yas_dk = max(0.0, (time.time() - float(uretim.get("ts") or 0)) / 60)
+            uretim_txt = (f"{fmt.tr_sayi(uretim.get('kayit', 0), 0)} kayıt · "
+                          f"son kayıt: {_ts_tr(uretim.get('son_ts'))} · "
                           f"yayın: {yas_dk:.0f} dk önce")
             if yas_dk > 30:
                 uretim_txt += ("\n⚠️ Yayın 30 dk'dan eski — cron gecikmiş ya da durmuş "
