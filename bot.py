@@ -95,6 +95,26 @@ def _kod_normalle(girdi: str) -> str:
     return kod
 
 
+async def _guvenli_defer(interaction: discord.Interaction, **kw) -> bool:
+    """defer'i güvenle dener; başaramazsa False döner (komut sessizce vazgeçer).
+
+    10062 Unknown interaction: 3 sn'lik onay penceresi kaçtı (ağ gecikmesi) —
+    ya da AYNI TOKEN'la ikinci bir bot süreci çalışıyor ve etkileşimi o kaptı.
+    40060 already acknowledged: yine çift süreç belirtisi (diğeri defer etmiş).
+    Bu durumlarda cevap veremeyiz; traceback yerine tek satır uyarı düşülür.
+    """
+    try:
+        await interaction.response.defer(**kw)
+        return True
+    except discord.NotFound:
+        log.warning("Etkileşim onaylanamadı (10062): pencere kaçtı ya da aynı "
+                    "token'la İKİNCİ bir bot süreci çalışıyor olabilir.")
+        return False
+    except discord.HTTPException as ex:
+        log.warning("defer başarısız (%s) — etkileşim yoksayıldı (çift süreç?).", ex)
+        return False
+
+
 def _teknik_alani(e: discord.Embed, gor: analiz.TeknikGorunum | None) -> None:
     """'📈 Teknik Görünüm' alanını ekler (gor yoksa hiç eklemez)."""
     if gor is None:
@@ -277,7 +297,8 @@ class GrafikView(discord.ui.View):
     def _tiklama(self, periyot: str):
         async def callback(interaction: discord.Interaction):
             # Bileşen etkileşimini onayla (mesajı sonra düzenleyeceğiz)
-            await interaction.response.defer()
+            if not await _guvenli_defer(interaction):
+                return
             self.secilen = periyot
             pencere = market.slice_window(self.df, periyot)
             buf = await asyncio.to_thread(
@@ -315,7 +336,8 @@ async def hisse(
 ):
     secilen = periyot.value if periyot else "1 Ay"
     # Grafik üretimi birkaç saniye sürer; 3 sn'lik cevap penceresini uzat
-    await interaction.response.defer(thinking=True)
+    if not await _guvenli_defer(interaction, thinking=True):
+        return
 
     kod_norm = _kod_normalle(kod)
     try:
@@ -354,8 +376,11 @@ async def hisse(
 
     except Exception:
         log.exception("/hisse hatası (%s)", kod_norm)
-        await interaction.followup.send(
-            "Beklenmeyen bir hata oluştu, lütfen birazdan tekrar dene.")
+        try:
+            await interaction.followup.send(
+                "Beklenmeyen bir hata oluştu, lütfen birazdan tekrar dene.")
+        except discord.HTTPException:
+            pass  # etkileşim öldü (bayat/çift süreç) — gönderilecek yer yok
 
 
 @hisse.autocomplete("kod")
@@ -415,7 +440,8 @@ async def health(interaction: discord.Interaction):
     Kaynaklar bu komutun çalıştığı ortamdan denenir; scrape kırıksa hatayı gösterir.
     Haber botu ayrı bir süreç olduğu için bu, paylaşılan kaynak erişimini test eder.
     """
-    await interaction.response.defer(thinking=True)
+    if not await _guvenli_defer(interaction, thinking=True):
+        return
     feeds = sources.feeds_from_env()
     enable_kap = os.getenv("ENABLE_KAP", "1") == "1"
 
