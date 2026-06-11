@@ -64,6 +64,7 @@ URL'yi kopyala → `.env` içine `DISCORD_WEBHOOK_URL` olarak yapıştır.
 | `MAX_ITEM_AGE_HOURS` | Bundan eski (tarihi çözülebilen) haber gönderilmez, sadece işaretlenir | `24` |
 | `DISCORD_BOT_TOKEN` | `/hisse` komut botunun token'ı (sadece `bot.py` için) | — |
 | `GUILD_ID` | Dev: komutların anında göründüğü test sunucusu ID'si | boş (global) |
+| `GITHUB_REPO` | `/health`'in üretim durumunu okuduğu repo (`durum` dalı) | bu repo |
 
 ## /hisse Komutu (ayrı bot: bot.py)
 

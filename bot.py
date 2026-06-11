@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 import aiohttp
@@ -383,6 +384,29 @@ def _ts_tr(ts: float | None) -> str:
         return "—"
 
 
+# Üretim haber botunun koştuğu repo: bot.yml her turda seen.db özetini repo'nun
+# 'durum' dalına status.json olarak push'lar; /health üretim kayıt sayısını
+# oradan okur (Actions cache'i dışarıdan okunamaz, yereldeki seen.db ise bu
+# makinenin eski denemelerinden kalmadır — ikisi karıştırılmamalı).
+_GITHUB_REPO = os.getenv("GITHUB_REPO", "ilkerylmaz/borsa-takip-botu")
+
+
+async def _uretim_durumu(session: aiohttp.ClientSession) -> dict | None:
+    """'durum' dalındaki status.json'u çeker. Repo ayarsızsa None,
+    hata halinde {'hata': ...} döner (asla raise etmez)."""
+    repo = _GITHUB_REPO.strip()
+    if not repo:
+        return None
+    url = f"https://raw.githubusercontent.com/{repo}/durum/status.json"
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
+            if r.status != 200:
+                return {"hata": f"HTTP {r.status}"}
+            return await r.json(content_type=None)
+    except Exception as ex:
+        return {"hata": f"{type(ex).__name__}: {ex}"}
+
+
 @client.tree.command(name="health",
                      description="Haber botunun kaynak sağlığını kontrol eder (RSS/KAP scrape testi)")
 async def health(interaction: discord.Interaction):
@@ -397,7 +421,10 @@ async def health(interaction: discord.Interaction):
 
     try:
         async with aiohttp.ClientSession() as session:
-            rapor = await sources.probe(session, feeds, enable_kap)
+            rapor, durum = await asyncio.gather(
+                sources.probe(session, feeds, enable_kap),
+                _uretim_durumu(session),
+            )
     except Exception:
         log.exception("/health yoklama hatası")
         await interaction.followup.send(
@@ -430,17 +457,33 @@ async def health(interaction: discord.Interaction):
         satirlar.append("➖ **KAP** — devre dışı (ENABLE_KAP=0)")
     e.add_field(name="Kaynaklar", value="\n".join(satirlar)[:1024] or "—", inline=False)
 
-    # seen.db (varsa) özeti — salt okunur, yan etkisiz
+    # Üretim haber botu (GitHub Actions): 'durum' dalındaki status.json özeti.
+    # Asıl seen.db Actions cache'inde yaşar; gerçek kayıt sayısı budur.
+    if durum is not None:
+        if durum.get("hata"):
+            uretim_txt = (f"durum okunamadı: {str(durum['hata'])[:120]}\n"
+                          "(`durum` dalı ilk cron turundan sonra oluşur)")
+        else:
+            yas_dk = max(0.0, (time.time() - float(durum.get("ts") or 0)) / 60)
+            uretim_txt = (f"{fmt.tr_sayi(durum.get('kayit', 0), 0)} kayıt · "
+                          f"son kayıt: {_ts_tr(durum.get('son_ts'))} · "
+                          f"yayın: {yas_dk:.0f} dk önce")
+            if yas_dk > 30:
+                uretim_txt += ("\n⚠️ Yayın 30 dk'dan eski — cron gecikmiş ya da durmuş "
+                               "olabilir (60 gün commit'siz repo'da Actions durur).")
+        e.add_field(name="☁️ Üretim seen.db (GitHub Actions)", value=uretim_txt, inline=False)
+
+    # Bu makinedeki seen.db (varsa) — yerel deneme artığıdır, üretim DEĞİLDİR
     db_path = os.getenv("SEEN_DB_PATH", "seen.db")
     st = await asyncio.to_thread(store.db_stats, db_path)
     if st:
-        db_txt = f"{fmt.tr_sayi(st['kayit'], 0)} kayıt · son: {_ts_tr(st['son_ts'])}"
+        db_txt = f"{fmt.tr_sayi(st['kayit'], 0)} kayıt · son kayıt: {_ts_tr(st['son_ts'])}"
     else:
-        db_txt = "bulunamadı (haber botu bu makinede çalışmamış olabilir)"
-    e.add_field(name="📦 seen.db", value=db_txt, inline=False)
+        db_txt = "yok (üretim Actions'ta çalıştığı için bu normaldir)"
+    e.add_field(name="📦 seen.db (bu makine)", value=db_txt, inline=False)
 
     e.set_footer(text="Canlı tanı: kaynaklar bu komutun çalıştığı ortamdan denenir. "
-                      "Haber botu (main.py) ayrı bir süreçtir.")
+                      "Üretim kayıt sayısı Actions'ın yayınladığı durum dosyasından gelir.")
     await interaction.followup.send(embed=e)
     log.info("/health — %d/%d kaynak ok (%s)", ok_sayi, toplam, interaction.user)
 

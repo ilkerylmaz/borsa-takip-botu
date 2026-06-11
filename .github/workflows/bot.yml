@@ -17,6 +17,10 @@ concurrency:
   group: bot
   cancel-in-progress: false # çakışan turlar kuyruğa girsin, yarıda kesilmesin
 
+# 'durum' dalına status.json push'lamak için (bkz. son adım) yazma izni gerek
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -54,3 +58,30 @@ jobs:
         with:
           path: seen.db
           key: seen-db-v2-${{ github.run_id }}
+
+      # seen.db özetini 'durum' dalına status.json olarak yayınla — /health
+      # üretim kayıt sayısını buradan okur (Actions cache dışarıdan okunamaz).
+      # Dal her turda orphan olarak yeniden yaratılıp force-push'lanır: tarihçe
+      # büyümez, main'e commit gürültüsü bulaşmaz.
+      - name: Durumu yayınla (durum dalı)
+        if: always()
+        run: |
+          python - <<'PYEOF'
+          import json, sqlite3, time
+          out = {"ts": time.time(), "run_id": "${{ github.run_id }}"}
+          try:
+              conn = sqlite3.connect("file:seen.db?mode=ro", uri=True)
+              n, mx, mn = conn.execute("SELECT COUNT(*), MAX(ts), MIN(ts) FROM seen").fetchone()
+              conn.close()
+              out.update({"kayit": n or 0, "son_ts": mx, "ilk_ts": mn})
+          except Exception as ex:
+              out["hata"] = f"{type(ex).__name__}: {ex}"
+          json.dump(out, open("status.json", "w"))
+          PYEOF
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan durum
+          git reset
+          git add -f status.json
+          git commit -m "durum: $(date -u +%FT%TZ)"
+          git push -f origin durum

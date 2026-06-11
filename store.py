@@ -106,10 +106,14 @@ def db_stats(path: str = "seen.db") -> dict | None:
     yaratıp prune tetikleyeceği için salt-okunur bir bağlantı tercih edilir.
     """
     import os
+    from pathlib import Path
     if not os.path.exists(path):
         return None
     try:
-        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        # as_uri(): boşluk/parantez içeren Windows yollarını da geçerli
+        # file: URI'sine çevirir (ham f"file:{path}" özel karakterde kırılır)
+        uri = Path(path).resolve().as_uri() + "?mode=ro"
+        conn = sqlite3.connect(uri, uri=True)
         try:
             row = conn.execute("SELECT COUNT(*), MAX(ts), MIN(ts) FROM seen").fetchone()
         finally:
