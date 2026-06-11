@@ -17,13 +17,50 @@ import asyncio
 import logging
 import os
 import time
+from urllib.parse import quote
 
 import aiohttp
 import feedparser
 
 from filters import NewsItem
+from textnorm import fold
 
 log = logging.getLogger("sources")
+
+# ---------------------------------------------------------------------------
+# Hedefli arama feed'leri (Google News RSS).
+# Genel ekonomi feed'leri SPK onayı / halka arz gibi olay haberlerini güvenilir
+# taşımıyor (teşhis: SPK halka arz onayı hiç çekilmemişti). Google News araması
+# bu boşluğu kapatır: sorgu BIST-olay terimlerine kilitli olduğundan sorgudan
+# gelen her haber doğal bir alaka sinyali taşır -> QUERY_FEED_BONUS.
+# `when:1d` son 24 saate kısar (10 dk'lık cron penceresi için bol bol yeterli).
+# ---------------------------------------------------------------------------
+GNEWS_QUERIES = [
+    '"halka arz"',
+    "SPK onay",
+    "temettü",
+    # "bedelsiz" tek başına futbol transferlerini de çekiyor ("bedelsiz transfer");
+    # "bedelsiz sermaye" / "bedelli sermaye" borsa bağlamına kilitler.
+    '"bedelsiz sermaye" OR "bedelli sermaye" OR "sermaye artırımı"',
+    '"pay geri alım" OR "geri alım programı"',
+]
+
+_GNEWS_PREFIX = "https://news.google.com/rss/"
+QUERY_FEED_BONUS = 2  # sorgu feed'inden gelen habere eklenen alaka puanı
+
+# Google News sonuçlarından elenecek yayıncılar (fold'lanmış alt-dize eşleşmesi):
+# kripto siteleri ve BIST ile ilgisiz yabancı içerik çevirileri. Kuru-çalıştırma
+# testinde gözlenen gürültü kaynakları; gerektikçe genişlet.
+GNEWS_PUBLISHER_BLOCKLIST = (
+    "coin", "kripto", "bitcoin", "phemex", "paribu", "beincrypto",
+    "vietnam", "invezz", "winally", "traders union", "firstonline", "cgtn",
+)
+
+
+def gnews_url(query: str) -> str:
+    """Google News RSS arama adresi üretir (Türkçe/TR sürümü)."""
+    return f"{_GNEWS_PREFIX}search?q={quote(query + ' when:1d')}&hl=tr&gl=TR&ceid=TR:tr"
+
 
 DEFAULT_RSS_FEEDS = [
     "https://www.bloomberght.com/rss",
@@ -34,7 +71,7 @@ DEFAULT_RSS_FEEDS = [
     # telafi eden borsa-odaklı bir kaynak. (finansgundem.com kardeş sitesi neredeyse
     # birebir aynı içeriği farklı URL'le yayınladığından eklenmedi — çift haber olurdu.)
     "https://www.borsagundem.com/rss",
-]
+] + [gnews_url(q) for q in GNEWS_QUERIES]
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (compatible; BIST-HaberBot/1.0)",
@@ -49,29 +86,60 @@ KAP_ITEM_BASE = "https://www.kap.org.tr/tr/Bildirim/"
 _kap_uyarildi = False  # aynı KAP uyarısını her turda tekrarlamamak için
 
 
-async def fetch_rss(session: aiohttp.ClientSession, feeds: list[str]) -> list[NewsItem]:
+def _yayinci_eki_kirp(title: str, publisher: str) -> str:
+    """Google News başlık sonundaki ' - Yayıncı' ekini kırpar (eşleşiyorsa)."""
+    if publisher and " - " in title:
+        govde, kuyruk = title.rsplit(" - ", 1)
+        if fold(kuyruk) == fold(publisher):
+            return govde.strip()
+    return title
+
+
+async def _fetch_one_rss(session: aiohttp.ClientSession, url: str) -> list[NewsItem]:
+    """Tek RSS feed'ini çeker; ölü feed boş liste döndürür (asla raise etmez)."""
     items: list[NewsItem] = []
-    for url in feeds:
-        try:
-            async with session.get(url, headers=_HEADERS, timeout=aiohttp.ClientTimeout(total=20)) as r:
-                raw = await r.read()
-            parsed = feedparser.parse(raw)
-            source_name = parsed.feed.get("title", url) if parsed.feed else url
-            for e in parsed.entries:
-                link = e.get("link", "")
-                items.append(
-                    NewsItem(
-                        source=source_name,
-                        uid=e.get("id") or link,
-                        title=_clean(e.get("title", ""))[:256],
-                        summary=_clean(e.get("summary", "")),
-                        url=link,
-                        published=e.get("published", ""),
-                    )
+    try:
+        async with session.get(url, headers=_HEADERS, timeout=aiohttp.ClientTimeout(total=20)) as r:
+            raw = await r.read()
+        parsed = feedparser.parse(raw)
+        source_name = parsed.feed.get("title", url) if parsed.feed else url
+        gnews = url.startswith(_GNEWS_PREFIX)
+        for e in parsed.entries:
+            link = e.get("link", "")
+            title = _clean(e.get("title", ""))[:256]
+            summary = _clean(e.get("summary", ""))
+            source, bonus = source_name, 0
+            if gnews:
+                # Google News girdisi: gerçek yayıncı <source> etiketinde; başlık
+                # ' - Yayıncı' eki taşır; özet diğer yayıncıların başlıklarını da
+                # içerebildiğinden (yanlış kelime eşleşmesi riski) kullanılmaz.
+                publisher = (e.get("source") or {}).get("title") or ""
+                if any(b in fold(publisher) for b in GNEWS_PUBLISHER_BLOCKLIST):
+                    continue
+                title = _yayinci_eki_kirp(title, publisher)
+                source = publisher or "Google Haberler"
+                summary = ""
+                bonus = QUERY_FEED_BONUS
+            items.append(
+                NewsItem(
+                    source=source,
+                    uid=e.get("id") or link,
+                    title=title,
+                    summary=summary,
+                    url=link,
+                    published=e.get("published", ""),
+                    source_bonus=bonus,
                 )
-        except Exception as ex:  # ölü feed -> atla
-            log.warning("RSS atlandı (%s) (%s: %s)", url, type(ex).__name__, ex)
+            )
+    except Exception as ex:  # ölü feed -> atla
+        log.warning("RSS atlandı (%s) (%s: %s)", url, type(ex).__name__, ex)
     return items
+
+
+async def fetch_rss(session: aiohttp.ClientSession, feeds: list[str]) -> list[NewsItem]:
+    """Tüm feed'leri EŞZAMANLI çeker (feed sayısı arttı; sıralı bekleme pahalı)."""
+    sonuclar = await asyncio.gather(*(_fetch_one_rss(session, u) for u in feeds))
+    return [it for grup in sonuclar for it in grup]
 
 
 async def fetch_kap(session: aiohttp.ClientSession) -> list[NewsItem]:

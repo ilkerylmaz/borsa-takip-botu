@@ -32,13 +32,15 @@ jobs:
       - run: pip install -r requirements.txt
 
       # Önceki turun seen.db'sini geri yükle (anahtarlar değişmez olduğundan
-      # her tur yeni anahtarla kaydedilir, restore-keys en yenisini bulur)
+      # her tur yeni anahtarla kaydedilir, restore-keys en yenisini bulur).
+      # v2: hedefli arama feed'leri eklenince önek bilinçli değiştirildi —
+      # eski db bulunmaz, taze db ilk turu sessiz geçirir (backlog seli olmaz).
       - uses: actions/cache/restore@v5
         with:
           path: seen.db
-          key: seen-db-${{ github.run_id }}
+          key: seen-db-v2-${{ github.run_id }}
           restore-keys: |
-            seen-db-
+            seen-db-v2-
 
       - name: Botu çalıştır (tek tur)
         env:
@@ -51,4 +53,4 @@ jobs:
         if: always() # tur hata verse bile işaretlenenleri kaybetme
         with:
           path: seen.db
-          key: seen-db-${{ github.run_id }}
+          key: seen-db-v2-${{ github.run_id }}

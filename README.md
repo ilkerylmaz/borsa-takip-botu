@@ -10,11 +10,22 @@ geçenleri **Discord'a** zengin mesaj (embed) olarak anlık gönderir.
 
 ## Bu botun yaptığı
 
-1. **Toplama** — `sources.py`: birden çok RSS feed'i + (opsiyonel) KAP bildirim akışı.
+1. **Toplama** — `sources.py`: borsa-odaklı RSS feed'leri + **hedefli Google News
+   arama feed'leri** (halka arz, SPK onayı, temettü, bedelsiz/bedelli sermaye
+   artırımı, pay geri alımı) + (opsiyonel) KAP bildirim akışı. Genel ekonomi
+   feed'lerinin taşımadığı SPK/halka arz olay haberlerini arama sorguları yakalar;
+   sorgudan gelen haber, sorgunun kendisi alaka sinyali olduğundan ek puan alır.
+   Kripto/BIST-dışı yayıncılar kara listeyle elenir (`GNEWS_PUBLISHER_BLOCKLIST`).
 2. **Filtreleme** — `filters.py`: metinde BIST hisse kodu/şirket adı eşleştirir,
    makro + şirket bazlı anahtar kelimelere ağırlık verip bir **önem skoru** üretir.
-   Skoru eşiğin altında kalan haber gönderilmez.
-3. **Tekilleştirme** — `store.py`: SQLite ile daha önce görülen haber tekrar gönderilmez.
+   "X nedir / ne zaman / nasıl yapılır" türü SEO dolgu başlıkları ve BIST-dışı
+   piyasa işaretleri (Nasdaq, Dow Jones...) **negatif** puan alır. Skoru eşiğin
+   altında kalan haber gönderilmez.
+3. **Tekilleştirme** — `store.py`: SQLite ile daha önce görülen haber tekrar
+   gönderilmez. Ayrıca **çapraz-kaynak tekilleştirme**: aynı haberin başka
+   sitedeki yeniden yayını (normalize başlık) ve aynı olayın farklı başlıklı
+   ikinci haberi (baskın anahtar kelime + başlıktaki özel ad/sayı örtüşmesi)
+   2 gün boyunca elenir — 20 ayrı "SpaceX halka arzı" makalesi tek mesaja iner.
 4. **Çıkarım** — `inference.py`: kural tabanlı **olası etki tahmini** — etki yönü
    (🟢 pozitif / 🔴 negatif / 🟡 karışık / ⚪ belirsiz), nedeni ve etkilenmesi
    beklenen hisse/piyasa embed'de gösterilir. (LLM değildir; yatırım tavsiyesi değildir.)
@@ -48,6 +59,8 @@ URL'yi kopyala → `.env` içine `DISCORD_WEBHOOK_URL` olarak yapıştır.
 | `RSS_FEEDS` | Virgülle ayrılmış RSS adresleri (opsiyonel, override) | dahili liste |
 | `RUN_ONCE` | `1` ise tek tur çalışıp çıkar (zamanlanmış ortamlar için) | `0` |
 | `SEEN_DB_PATH` | Tekilleştirme veritabanının yolu | `seen.db` |
+| `MAX_SENDS_PER_CYCLE` | Tek turda en fazla gönderilecek haber (sel sigortası; kalanlar sonraki tura devreder) | `10` |
+| `MAX_ITEM_AGE_HOURS` | Bundan eski (tarihi çözülebilen) haber gönderilmez, sadece işaretlenir | `24` |
 | `DISCORD_BOT_TOKEN` | `/hisse` komut botunun token'ı (sadece `bot.py` için) | — |
 | `GUILD_ID` | Dev: komutların anında göründüğü test sunucusu ID'si | boş (global) |
 
