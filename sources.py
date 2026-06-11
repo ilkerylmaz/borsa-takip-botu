@@ -43,6 +43,10 @@ GNEWS_QUERIES = [
     # "bedelsiz sermaye" / "bedelli sermaye" borsa bağlamına kilitler.
     '"bedelsiz sermaye" OR "bedelli sermaye" OR "sermaye artırımı"',
     '"pay geri alım" OR "geri alım programı"',
+    # Piyasa tedbirleri: bu terimler tek anlamlı (finans dışı kullanım yok)
+    '"brüt takas" OR "açığa satış yasağı" OR "kredili işlem yasağı" OR VBTS',
+    # "devre kesici" elektrik ürünlerinde de geçer; borsa bağlamına kilitle
+    '"devre kesici" (borsa OR hisse OR endeks)',
 ]
 
 _GNEWS_PREFIX = "https://news.google.com/rss/"

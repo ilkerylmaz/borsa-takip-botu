@@ -107,6 +107,49 @@ def _teknik_alani(e: discord.Embed, gor: analiz.TeknikGorunum | None) -> None:
                 value="\n".join(satirlar), inline=False)
 
 
+def _finansal_alani(e: discord.Embed, ov: dict) -> None:
+    """'💳 Borçluluk' alanını ekler (bilanço verisi yoksa hiç eklemez).
+
+    Bankalar/finans kuruluşları atlanır: mevduat ve fonlama bilanço gereği
+    'borç' göründüğünden totalDebt/FAVÖK metrikleri orada yanıltıcıdır.
+    Net borç <= 0 ise şirket net nakit pozisyonundadır (güçlü bilanço) ve
+    Net Borç/FAVÖK gösterilmez (negatif oran anlamsız).
+    """
+    f = ov.get("finansal") or {}
+    if f.get("sektor") == "Financial Services":
+        return
+    borc, nakit, net = f.get("toplam_borc"), f.get("nakit"), f.get("net_borc")
+    if borc is None and f.get("borc_ozsermaye") is None:
+        return  # gösterecek bilanço verisi yok
+
+    # Bilanço, şirketin raporlama para birimindedir (THYAO: USD) — TL sanma
+    birim = "TL" if f.get("para_birimi") in (None, "TRY") else f["para_birimi"]
+
+    satirlar = []
+    if net is not None:
+        if net <= 0:
+            satirlar.append(f"Net **nakit** pozisyonu: {fmt.tr_buyuk(-net, birim)} "
+                            f"(nakit {fmt.tr_buyuk(nakit, birim)} > borç {fmt.tr_buyuk(borc, birim)})")
+        else:
+            satirlar.append(f"Net borç: {fmt.tr_buyuk(net, birim)} "
+                            f"(borç {fmt.tr_buyuk(borc, birim)} − nakit {fmt.tr_buyuk(nakit, birim)})")
+    elif borc is not None:
+        satirlar.append(f"Toplam borç: {fmt.tr_buyuk(borc, birim)}")
+
+    oranlar = []
+    bo = f.get("borc_ozsermaye")
+    if bo is not None:
+        oranlar.append(f"Borç/Özkaynak: %{fmt.tr_sayi(bo, 1)}")
+    nbf = f.get("net_borc_favok")
+    if nbf is not None:
+        oranlar.append(f"Net Borç/FAVÖK: {fmt.tr_sayi(nbf, 1)}x")
+    if oranlar:
+        satirlar.append(" · ".join(oranlar))
+
+    if satirlar:
+        e.add_field(name="💳 Borçluluk", value="\n".join(satirlar), inline=False)
+
+
 def _analist_alani(e: discord.Embed, ov: dict) -> None:
     """'🏦 Analist Konsensüsü' alanını ekler.
 
@@ -187,6 +230,7 @@ def _overview_embed(ov: dict, periyot: str,
         inline=True,
     )
 
+    _finansal_alani(e, ov)
     _teknik_alani(e, gor)
     _analist_alani(e, ov)
 

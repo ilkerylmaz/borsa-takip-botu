@@ -16,13 +16,17 @@ def tr_sayi(x: float, ondalik: int = 2) -> str:
     return s.replace(",", "§").replace(".", ",").replace("§", ".")
 
 
-def tr_buyuk(x: float) -> str:
-    """Büyük tutarları kısalt: 4.08e11 -> '408,00 Mr TL' (Mr=Milyar, Mn=Milyon)."""
+def tr_buyuk(x: float, birim: str = "TL") -> str:
+    """Büyük tutarları kısalt: 4.08e11 -> '408,00 Mr TL' (Mr=Milyar, Mn=Milyon).
+
+    birim: para birimi etiketi — bilanço kalemleri şirketin raporlama para
+    biriminde gelebilir (ör. THYAO bilançosu USD), o zaman 'USD' geçilir.
+    """
     if x >= 1e9:
-        return f"{tr_sayi(x / 1e9)} Mr TL"
+        return f"{tr_sayi(x / 1e9)} Mr {birim}"
     if x >= 1e6:
-        return f"{tr_sayi(x / 1e6)} Mn TL"
-    return f"{tr_sayi(x, 0)} TL"
+        return f"{tr_sayi(x / 1e6)} Mn {birim}"
+    return f"{tr_sayi(x, 0)} {birim}"
 
 
 def tr_yuzde(x: float) -> str:

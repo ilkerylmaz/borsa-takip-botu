@@ -42,6 +42,19 @@ SENTIMENT_PATTERNS: list[tuple[str, str, int, str]] = [
     (r"bedelli", "negatif", 1, "bedelli sermaye artırımı"),
     (r"grev|is birakma", "negatif", 2, "grev/iş bırakma"),
     (r"net kar.{0,15}(dustu|geriledi|azal)", "negatif", 2, "kâr düşüşü"),
+    # --- Piyasa tedbirleri: kısıt haberi genelde baskı yaratır ---
+    (r"brut takas", "negatif", 2, "brüt takas tedbiri"),
+    (r"aciga satis yasag", "negatif", 2, "açığa satış yasağı"),
+    (r"kredili islem yasag", "negatif", 2, "kredili işlem yasağı"),
+    (r"devre kesici", "negatif", 1, "devre kesici"),
+    (r"vbts|volatilite bazli", "negatif", 1, "VBTS tedbiri"),
+    (r"yakin izleme", "negatif", 2, "yakın izleme pazarı"),
+    (r"islem siras\w*.{0,12}durdur", "negatif", 2, "işlem sırası durdurma"),
+    (r"islem (yasagi|kisitlama)", "negatif", 2, "işlem kısıtlaması"),
+    (r"tedbir (karari|uygulan)", "negatif", 1, "piyasa tedbiri"),
+    # Tedbirin kalkması pozitiftir; ağırlık 3, "kredili islem yasag" gibi
+    # negatif kalıpla aynı haberde çakışırsa pozitif yön baskın çıksın diye
+    (r"yasa(k|gi|klar).{0,10}kalk|tedbir(ler)?.{0,12}sona er", "pozitif", 3, "tedbir kaldırılıyor"),
     # --- Yönü bağlama bağlı (sadece etiket üretir, yön puanı vermez) ---
     (r"halka arz", "notr", 0, "halka arz"),
     (r"faiz karari|politika faizi|ppk", "notr", 0, "faiz kararı"),

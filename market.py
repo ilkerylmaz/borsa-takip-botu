@@ -54,7 +54,11 @@ def is_valid(df: pd.DataFrame) -> bool:
 
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    """SMA200, MACD(12,26,9) ve RSI(14) kolonlarını ekler (yerinde)."""
+    """SMA200/50/20, Bollinger(20,2), MACD(12,26,9), RSI(14), ATR(14) ekler (yerinde).
+
+    SMA20/Bollinger/ATR grafikte çizilmez; analiz.teknik_gorunum sinyalleri
+    içindir (aşırı uzama + volatilite uyarısı).
+    """
     close = df["Close"]
 
     # SMA200 — kısa geçmişli hisselerde de çizgi çıksın diye min_periods=1
@@ -62,6 +66,13 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # SMA50 — orta vade trend / kesişim (analiz.teknik_gorunum kullanır)
     df["SMA50"] = close.rolling(50, min_periods=1).mean()
+
+    # SMA20 + Bollinger(20, 2σ) — aşırı uzama/aşırı satım sinyali
+    sma20 = close.rolling(20, min_periods=1).mean()
+    std20 = close.rolling(20, min_periods=2).std()
+    df["SMA20"] = sma20
+    df["BBust"] = sma20 + 2 * std20
+    df["BBalt"] = sma20 - 2 * std20
 
     # MACD(12,26,9)
     ema12 = close.ewm(span=12, adjust=False).mean()
@@ -78,6 +89,15 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     avg_loss = loss.ewm(alpha=1 / 14, adjust=False).mean()
     rs = avg_gain / avg_loss.replace(0, pd.NA)
     df["RSI"] = (100 - 100 / (1 + rs)).fillna(50)
+
+    # ATR(14) — Wilder; volatilite uyarısı için (yön sinyali değil)
+    onceki_kapanis = close.shift(1)
+    tr = pd.concat([
+        df["High"] - df["Low"],
+        (df["High"] - onceki_kapanis).abs(),
+        (df["Low"] - onceki_kapanis).abs(),
+    ], axis=1).max(axis=1)
+    df["ATR"] = tr.ewm(alpha=1 / 14, adjust=False).mean()
 
     return df
 
@@ -141,6 +161,28 @@ def get_overview(kod: str) -> dict:
     piyasa_degeri = info.get("marketCap")
     ad = info.get("longName") or info.get("shortName") or _ad_from_tickers(kod)
 
+    # --- Borçluluk: aynı (cache'li) info'dan, ekstra istek yok ---
+    # debtToEquity yüzde olarak gelir (ör. 35.4 = %35,4). Bankalarda bilanço
+    # yapısı gereği bu metrikler anlamsızdır; sektör bilgisi sunum tarafına
+    # geçilir, gizleme kararı orada (bot._finansal_alani) verilir.
+    toplam_borc = info.get("totalDebt")
+    nakit = info.get("totalCash")
+    net_borc = (toplam_borc - nakit) if (toplam_borc is not None and nakit is not None) else None
+    favok = info.get("ebitda")
+    finansal = {
+        "toplam_borc": toplam_borc,
+        "nakit": nakit,
+        "net_borc": net_borc,
+        "borc_ozsermaye": info.get("debtToEquity"),   # yüzde
+        "favok": favok,
+        # standart kaldıraç ölçüsü; net nakit pozisyonunda (<=0) anlamsız
+        "net_borc_favok": (net_borc / favok) if (net_borc and net_borc > 0 and favok) else None,
+        "sektor": info.get("sector"),
+        # bilanço kalemleri raporlama para birimindedir (THYAO: USD!) —
+        # fiyat para birimi (TRY) ile karıştırma; sunum tarafı etiketler
+        "para_birimi": info.get("financialCurrency") or "TRY",
+    }
+
     # --- Analist konsensüsü: aynı (cache'li) info'dan, ekstra istek yok ---
     # Yahoo BIST'in likit isimlerini kapsar; küçük/yeni hisselerde alanlar
     # boş gelir. tavsiye ham anahtar olarak döner ("strong_buy"/"none"/None);
@@ -168,6 +210,7 @@ def get_overview(kod: str) -> dict:
         "dolasim_kaynak": dolasim_kaynak,  # "float" | "shares" | None
         "dolasim_tl": dolasim_lot * fiyat if (dolasim_lot and fiyat) else None,
         "piyasa_degeri": piyasa_degeri,
+        "finansal": finansal,
         "analist": analist,
     }
 

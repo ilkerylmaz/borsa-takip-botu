@@ -12,7 +12,8 @@ geçenleri **Discord'a** zengin mesaj (embed) olarak anlık gönderir.
 
 1. **Toplama** — `sources.py`: borsa-odaklı RSS feed'leri + **hedefli Google News
    arama feed'leri** (halka arz, SPK onayı, temettü, bedelsiz/bedelli sermaye
-   artırımı, pay geri alımı) + (opsiyonel) KAP bildirim akışı. Genel ekonomi
+   artırımı, pay geri alımı, **piyasa tedbirleri**: brüt takas, açığa satış /
+   kredili işlem yasağı, devre kesici, VBTS) + (opsiyonel) KAP bildirim akışı. Genel ekonomi
    feed'lerinin taşımadığı SPK/halka arz olay haberlerini arama sorguları yakalar;
    sorgudan gelen haber, sorgunun kendisi alaka sinyali olduğundan ek puan alır.
    Kripto/BIST-dışı yayıncılar kara listeyle elenir (`GNEWS_PUBLISHER_BLOCKLIST`).
@@ -72,6 +73,13 @@ kalan bir gateway botu. Chatte `/hisse kod:THYAO periyot:1 Ay` yazınca:
 - 💰 anlık fiyat + günlük değişim
 - 📊 son seans hacmi (lot + TL karşılığı)
 - 🔄 dolaşımdaki lot sayısı ve piyasa değeri (+ toplam piyasa değeri)
+- 💳 borçluluk: net borç (veya net nakit pozisyonu), Borç/Özkaynak,
+  Net Borç/FAVÖK — şirketin raporlama para birimiyle (THYAO bilançosu USD!);
+  bankalarda gösterilmez (mevduat "borç" göründüğünden yanıltıcı olur)
+- 📈 teknik görünüm: 10 klasik sinyalin (SMA200/50 trend + eğim, golden/death
+  cross, MACD momentum ivmesi, RSI bantları, hacim teyidi, Bollinger,
+  52 hafta zirve/dip, ~1 ay getiri) ağırlıklı özeti — yön + güven + gerekçeler,
+  yüksek volatilitede (ATR) ayrıca uyarı
 - 📈 günlük mum grafiği (1 Hafta / 1 Ay / 3 Ay / 1 Yıl): mumların üzerinde
   **SMA200**, altında **MACD(12,26,9)** ve **RSI(14)** panelleri
 - 🔘 grafiğin altındaki düğmelerle periyot **anında değiştirilir** (yeni komut

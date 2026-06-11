@@ -55,6 +55,26 @@ KEYWORD_WEIGHTS: list[tuple[str, int, str]] = [
     ("pay devri", 3, "ma"),
     ("ortaklık", 2, "ma"),
     ("pay alım teklifi", 4, "ma"),
+    # --- Piyasa tedbirleri (BIST/SPK: hisse bazlı kısıt/yaptırım haberleri) ---
+    ("brüt takas", 5, "tedbir"),
+    ("açığa satış yasağı", 5, "tedbir"),
+    ("açığa satış", 2, "tedbir"),
+    ("kredili işlem yasağı", 5, "tedbir"),
+    ("kredili işlem", 2, "tedbir"),
+    ("devre kesici", 4, "tedbir"),
+    ("vbts", 4, "tedbir"),
+    ("volatilite bazlı", 3, "tedbir"),
+    ("yakın izleme", 3, "tedbir"),
+    ("işlem sırası durdur", 4, "tedbir"),
+    ("işlem yasağı", 3, "tedbir"),
+    ("işlem kısıtlama", 3, "tedbir"),
+    ("tedbir kararı", 2, "tedbir"),
+    ("tedbir uygulan", 3, "tedbir"),
+    # tedbirin KALKMASI da haberdir (yön pozitif; inference ayrıca etiketler)
+    ("yasak kalk", 3, "tedbir"),
+    ("yasaklar kalk", 3, "tedbir"),
+    ("tedbir sona er", 3, "tedbir"),
+    ("tedbirler sona er", 3, "tedbir"),
     # --- Halka arz süreci (SPK bülteni / izahname / talep toplama) ---
     ("izahname", 2, "sirket"),
     ("talep toplama", 3, "sirket"),
@@ -105,6 +125,7 @@ CATEGORY_COLORS = {
     "ma": 0x9B59B6,          # mor (M&A)
     "is": 0x3498DB,          # mavi
     "regülasyon": 0x95A5A6,  # gri
+    "tedbir": 0xC0392B,      # koyu kırmızı (piyasa tedbiri/yaptırım — dikkat çeksin)
     "default": 0x34495E,
 }
 
@@ -173,6 +194,10 @@ _ENTITY_STOP = (
     "sirket", "hisse", "pay", "lot", "fiyat", "onay", "karar", "yeni",
     "son", "dakika", "bedelsiz", "bedelli", "sermaye", "temettu", "halka",
     "arz", "yuzde", "milyon", "milyar", "resmi", "bugun", "yarin",
+    # tedbir başlıklarının jenerikleri (farklı hisselerin tedbir haberleri
+    # salt bu kelimeler üzerinden aynı olay sanılmasın)
+    "brut", "takas", "tedbir", "devre", "kesici", "aciga", "satis",
+    "yasak", "yasag", "kredili", "islem", "volatilite", "vbts",
 )
 
 
