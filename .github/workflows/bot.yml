@@ -10,7 +10,7 @@ name: bist-haber-botu
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: ""
   workflow_dispatch: {} # elle tetiklemek için (Actions sekmesi -> Run workflow)
 
 concurrency:
